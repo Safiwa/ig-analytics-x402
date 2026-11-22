@@ -26,6 +26,34 @@ const BUILTIN_PROTECTED_PATHS: ProtectedRouteConfig[] = [
 const BUILT_IN_PUBLIC_PATHS = ["/__x402/health", "/__x402/config"];
 
 /**
+ * instagram-analytics.com customization:
+ * Only known AI crawlers are charged. Humans, search engines (Googlebot,
+ * Bingbot, Applebot) and everything else pass through to the site for free.
+ * Edit this list to change who pays.
+ */
+const CHARGED_USER_AGENTS = [
+	"GPTBot",
+	"OAI-SearchBot",
+	"ClaudeBot",
+	"anthropic-ai",
+	"AzureAI-SearchBot",
+	"PerplexityBot",
+	"CCBot",
+	"Bytespider",
+	"Amazonbot",
+	"meta-externalagent",
+	"GoogleOther",
+	"cohere-ai",
+	"Diffbot",
+	"Timpibot",
+];
+
+function isChargedCrawler(request: Request): boolean {
+	const ua = (request.headers.get("user-agent") || "").toLowerCase();
+	return CHARGED_USER_AGENTS.some((bot) => ua.includes(bot.toLowerCase()));
+}
+
+/**
  * Get the request path without parsing the URL so normalization changes can be
  * detected before making an authorization decision.
  */
@@ -170,6 +198,11 @@ app.use("*", async (c, next) => {
 	// Check if this path is protected (including /__x402/protected)
 	const protectedConfig = findProtectedRouteConfig(path, protectedPatterns);
 	if (protectedConfig) {
+		// Not an AI crawler (humans, search engines): serve for free
+		if (path !== "/__x402/protected" && !isChargedCrawler(c.req.raw)) {
+			return proxyToOrigin(c.req.raw, c.env);
+		}
+
 		// Bot Management Filtering: check if request has exception (human or excepted bot)
 		if (hasBotManagementException(c.req.raw, protectedConfig)) {
 			if (path === "/__x402/protected") {
